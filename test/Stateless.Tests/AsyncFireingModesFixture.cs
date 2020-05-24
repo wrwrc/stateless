@@ -18,22 +18,26 @@ namespace Stateless.Tests
         public void ImmediateEntryAProcessedBeforeEnterB()
         {
             var record = new List<string>();
-            var sm = new StateMachine<State, Trigger>(State.A, FiringMode.Immediate);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A, FiringMode.Immediate);
 
             sm.Configure(State.A)
-                .OnEntry(() => record.Add("EnterA"))
+                .OnEntry(() =>
+                {
+                    record.Add("EnterA");
+                    return Task.CompletedTask;
+                })
                 .Permit(Trigger.X, State.B)
-                .OnExit(() => record.Add("ExitA"));
+                .OnExit(() => { record.Add("ExitA"); return Task.CompletedTask; });
 
             sm.Configure(State.B)
                 .OnEntry(() =>
                 {
                     record.Add("EnterB");
                     // Fire this before finishing processing the entry action
-                    sm.FireAsync(Trigger.Y);
+                    return sm.FireAsync(Trigger.Y);
                 })
                 .Permit(Trigger.Y, State.A)
-                .OnExit(() => record.Add("ExitB"));
+                .OnExit(() => { record.Add("ExitB"); return Task.CompletedTask; });
 
             sm.FireAsync(Trigger.X);
 
@@ -52,22 +56,26 @@ namespace Stateless.Tests
         public void ImmediateEntryAProcessedBeforeEterB()
         {
             var record = new List<string>();
-            var sm = new StateMachine<State, Trigger>(State.A, FiringMode.Queued);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A, FiringMode.Queued);
 
             sm.Configure(State.A)
-                .OnEntry(() => record.Add("EnterA"))
-                .Permit(Trigger.X, State.B)
-                .OnExit(() => record.Add("ExitA"));
-
-            sm.Configure(State.B)
                 .OnEntry(() =>
                 {
+                    record.Add("EnterA");
+                    return Task.CompletedTask;
+                })
+                .Permit(Trigger.X, State.B)
+                .OnExit(() => { record.Add("ExitA"); return Task.CompletedTask; });
+
+            sm.Configure(State.B)
+                .OnEntry(async () =>
+                {
                     // Fire this before finishing processing the entry action
-                    sm.FireAsync(Trigger.Y);
+                    await sm.FireAsync(Trigger.Y);
                     record.Add("EnterB");
                 })
                 .Permit(Trigger.Y, State.A)
-                .OnExit(() => record.Add("ExitB"));
+                .OnExit(() => { record.Add("ExitB"); return Task.CompletedTask; });
 
             sm.FireAsync(Trigger.X);
 
@@ -85,27 +93,47 @@ namespace Stateless.Tests
         public void ImmediateFireingOnEntryEndsUpInCorrectState()
         {
             var record = new List<string>();
-            var sm = new StateMachine<State, Trigger>(State.A, FiringMode.Immediate);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A, FiringMode.Immediate);
 
             sm.Configure(State.A)
-                .OnEntry(() => record.Add("EnterA"))
+                .OnEntry(() =>
+                {
+                    record.Add("EnterA");
+                    return Task.CompletedTask;
+                })
                 .Permit(Trigger.X, State.B)
-                .OnExit(() => record.Add("ExitA"));
+                .OnExit(() =>
+                {
+                    record.Add("ExitA");
+                    return Task.CompletedTask;
+                });
 
             sm.Configure(State.B)
                 .OnEntry(() =>
                 {
                     record.Add("EnterB");
                     // Fire this before finishing processing the entry action
-                    sm.Fire(Trigger.X);
+                    return sm.FireAsync(Trigger.X);
                 })
                 .Permit(Trigger.X, State.C)
-                .OnExit(() => record.Add("ExitB"));
+                .OnExit(() =>
+                {
+                    record.Add("ExitB");
+                    return Task.CompletedTask;
+                });
 
             sm.Configure(State.C)
-                .OnEntry(() => record.Add("EnterC"))
+                .OnEntry(() =>
+                {
+                    record.Add("EnterC");
+                    return Task.CompletedTask;
+                })
                 .Permit(Trigger.X, State.A)
-                .OnExit(() => record.Add("ExitC"));
+                .OnExit(() =>
+                {
+                    record.Add("ExitC");
+                    return Task.CompletedTask;
+                });
 
             sm.FireAsync(Trigger.X);
 
@@ -125,25 +153,26 @@ namespace Stateless.Tests
         public async Task ImmediateModeTransitionsAreInCorrectOrderWithAsyncDriving()
         {
             var record = new List<State>();
-            var sm = new StateMachine<State, Trigger>(State.A, FiringMode.Immediate);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A, FiringMode.Immediate);
 
-            sm.OnTransitioned((t) =>
+            sm.OnTransitionedAsync((t) =>
             {
                 record.Add(t.Destination);
+                return Task.CompletedTask;
             });
 
             sm.Configure(State.A)
                 .Permit(Trigger.X, State.B);
 
             sm.Configure(State.B)
-                .OnEntryAsync(async () =>
+                .OnEntry(async () =>
                 {
                     await sm.FireAsync(Trigger.Y).ConfigureAwait(false);
                 })
                 .Permit(Trigger.Y, State.C);
 
             sm.Configure(State.C)
-                .OnEntryAsync(async () =>
+                .OnEntry(async () =>
                 {
                     await sm.FireAsync(Trigger.Z).ConfigureAwait(false);
                 })
@@ -161,12 +190,12 @@ namespace Stateless.Tests
         [Fact]
         public async void EntersSubStateofSubstateAsyncOnEntryCountAndOrder()
         {
-            var sm = new StateMachine<State, Trigger>(State.A);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A);
 
             var onEntryCount = "";
 
             sm.Configure(State.A)
-                .OnEntryAsync(async () =>
+                .OnEntry(async () =>
                 {
                     onEntryCount += "A";
                     await Task.Delay(10);
@@ -174,7 +203,7 @@ namespace Stateless.Tests
                 .Permit(Trigger.X, State.B);
 
             sm.Configure(State.B)
-                .OnEntryAsync(async () =>
+                .OnEntry(async () =>
                 {
                     onEntryCount += "B";
                     await Task.Delay(10);
@@ -182,7 +211,7 @@ namespace Stateless.Tests
                 .InitialTransition(State.C);
 
             sm.Configure(State.C)
-                .OnEntryAsync(async () =>
+                .OnEntry(async () =>
                 {
                     onEntryCount += "C";
                     await Task.Delay(10);
@@ -191,7 +220,7 @@ namespace Stateless.Tests
                 .SubstateOf(State.B);
 
             sm.Configure(State.D)
-                .OnEntryAsync(async () =>
+                .OnEntry(async () =>
                 {
                     onEntryCount += "D";
                     await Task.Delay(10);

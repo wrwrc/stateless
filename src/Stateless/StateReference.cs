@@ -1,10 +1,7 @@
 ﻿namespace Stateless
 {
-    public partial class StateMachine<TState, TTrigger>
+    internal class StateReference<TState>
     {
-        internal class StateReference
-        {
-            public TState State { get; set; }
-        }
+        public TState State { get; set; }
     }
 }

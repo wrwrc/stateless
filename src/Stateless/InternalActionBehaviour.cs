@@ -3,55 +3,33 @@ using System.Threading.Tasks;
 
 namespace Stateless
 {
-    public partial class StateMachine<TState, TTrigger>
+    internal class SyncInternalActionBehaviour<TState, TTrigger>
     {
-        internal abstract class InternalActionBehaviour
+        readonly Action<Transition<TState, TTrigger>, object[]> _action;
+
+        public SyncInternalActionBehaviour(Action<Transition<TState, TTrigger>, object[]> action)
         {
-            public abstract void Execute(Transition transition, object[] args);
-            public abstract Task ExecuteAsync(Transition transition, object[] args);
+            _action = action;
+        }
 
-            public class Sync : InternalActionBehaviour
-            {
-                readonly Action<Transition, object[]> _action;
+        public void Execute(Transition<TState, TTrigger> transition, object[] args)
+        {
+            _action(transition, args);
+        }
+    }
 
-                public Sync(Action<Transition, object[]> action)
-                {
-                    _action = action;
-                }
+    internal class AsyncInternalActionBehaviour<TState, TTrigger>
+    {
+        readonly Func<Transition<TState, TTrigger>, object[], Task> _action;
 
-                public override void Execute(Transition transition, object[] args)
-                {
-                    _action(transition, args);
-                }
+        public AsyncInternalActionBehaviour(Func<Transition<TState, TTrigger>, object[], Task> action)
+        {
+            _action = action;
+        }
 
-                public override Task ExecuteAsync(Transition transition, object[] args)
-                {
-                    Execute(transition, args);
-                    return TaskResult.Done;
-                }
-            }
-
-            public class Async : InternalActionBehaviour
-            {
-                readonly Func<Transition, object[], Task> _action;
-
-                public Async(Func<Transition, object[], Task> action)
-                {
-                    _action = action;
-                }
-
-                public override void Execute(Transition transition, object[] args)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot execute asynchronous action specified in OnEntry event for '{transition.Destination}' state. " +
-                         "Use asynchronous version of Fire [FireAsync]");
-                }
-
-                public override Task ExecuteAsync(Transition transition, object[] args)
-                {
-                    return _action(transition, args);
-                }
-            }
+        public Task ExecuteAsync(Transition<TState, TTrigger> transition, object[] args)
+        {
+            return _action(transition, args);
         }
     }
 }

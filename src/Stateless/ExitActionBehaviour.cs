@@ -3,62 +3,43 @@ using System.Threading.Tasks;
 
 namespace Stateless
 {
-    public partial class StateMachine<TState, TTrigger>
+    internal abstract class ExitActionBehavior<TState, TTrigger>
     {
-        internal abstract class ExitActionBehavior
+        protected ExitActionBehavior(Reflection.InvocationInfo actionDescription)
         {
-            public abstract void Execute(Transition transition);
-            public abstract Task ExecuteAsync(Transition transition);
+            Description = actionDescription ?? throw new ArgumentNullException(nameof(actionDescription));
+        }
 
-            protected ExitActionBehavior(Reflection.InvocationInfo actionDescription)
-            {
-                Description = actionDescription ?? throw new ArgumentNullException(nameof(actionDescription));
-            }
+        internal Reflection.InvocationInfo Description { get; }
+    }
 
-            internal Reflection.InvocationInfo Description { get; }
+    internal class SyncExitActionBehavior<TState, TTrigger> : ExitActionBehavior<TState, TTrigger>
+    {
+        readonly Action<Transition<TState, TTrigger>> _action;
 
-            public class Sync : ExitActionBehavior
-            {
-                readonly Action<Transition> _action;
+        public SyncExitActionBehavior(Action<Transition<TState, TTrigger>> action, Reflection.InvocationInfo actionDescription) : base(actionDescription)
+        {
+            _action = action;
+        }
 
-                public Sync(Action<Transition> action, Reflection.InvocationInfo actionDescription) : base(actionDescription)
-                {
-                    _action = action;
-                }
+        public void Execute(Transition<TState, TTrigger> transition)
+        {
+            _action(transition);
+        }
+    }
 
-                public override void Execute(Transition transition)
-                {
-                    _action(transition);
-                }
+    internal class AsyncExitActionBehavior<TState, TTrigger> : ExitActionBehavior<TState, TTrigger>
+    {
+        readonly Func<Transition<TState, TTrigger>, Task> _action;
 
-                public override Task ExecuteAsync(Transition transition)
-                {
-                    Execute(transition);
-                    return TaskResult.Done;
-                }
-            }
+        public AsyncExitActionBehavior(Func<Transition<TState, TTrigger>, Task> action, Reflection.InvocationInfo actionDescription) : base(actionDescription)
+        {
+            _action = action;
+        }
 
-            public class Async : ExitActionBehavior
-            {
-                readonly Func<Transition, Task> _action;
-
-                public Async(Func<Transition, Task> action, Reflection.InvocationInfo actionDescription) : base(actionDescription)
-                {
-                    _action = action;
-                }
-
-                public override void Execute(Transition transition)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot execute asynchronous action specified in OnExit event for '{transition.Source}' state. " +
-                         "Use asynchronous version of Fire [FireAsync]");
-                }
-
-                public override Task ExecuteAsync(Transition transition)
-                {
-                    return _action(transition);
-                }
-            }
+        public Task ExecuteAsync(Transition<TState, TTrigger> transition)
+        {
+            return _action(transition);
         }
     }
 }

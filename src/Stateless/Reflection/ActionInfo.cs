@@ -15,11 +15,9 @@
         /// </summary>
         public string FromTrigger { get; internal set; }
 
-        internal static ActionInfo Create<TState, TTrigger>(StateMachine<TState, TTrigger>.EntryActionBehavior entryAction)
+        internal static ActionInfo Create<TState, TTrigger>(EntryActionBehavior<TState, TTrigger> entryAction)
         {
-            StateMachine<TState, TTrigger>.EntryActionBehavior.SyncFrom<TTrigger> syncFrom = entryAction as StateMachine<TState, TTrigger>.EntryActionBehavior.SyncFrom<TTrigger>;
-
-            if (syncFrom != null)
+            if (entryAction is SyncFromEntryActionBehavior<TState, TTrigger, TTrigger> syncFrom)
                 return new ActionInfo(entryAction.Description, syncFrom.Trigger.ToString());
             else
                 return new ActionInfo(entryAction.Description, null);

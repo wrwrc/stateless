@@ -9,7 +9,7 @@ namespace Stateless.Reflection
     /// </summary>
     public class StateInfo
     {
-        internal static StateInfo CreateStateInfo<TState, TTrigger>(StateMachine<TState, TTrigger>.StateRepresentation stateRepresentation)
+        internal static StateInfo CreateStateInfo<TState, TTrigger>(StateRepresentation<TState, TTrigger> stateRepresentation)
         {
             if (stateRepresentation == null)
                 throw new ArgumentException(nameof(stateRepresentation));
@@ -21,7 +21,7 @@ namespace Stateless.Reflection
             {
                 foreach (var item in triggerBehaviours.Value)
                 {
-                    if (item is StateMachine<TState, TTrigger>.IgnoredTriggerBehaviour behaviour)
+                    if (item is IgnoredTriggerBehaviour<TState, TTrigger> behaviour)
                     {
                         ignoredTriggers.Add(IgnoredTransitionInfo.Create(behaviour));
                     }
@@ -35,7 +35,7 @@ namespace Stateless.Reflection
                 stateRepresentation.ExitActions.Select(e => e.Description).ToList());
         }
  
-        internal static void AddRelationships<TState, TTrigger>(StateInfo info, StateMachine<TState, TTrigger>.StateRepresentation stateRepresentation, Func<TState, StateInfo> lookupState)
+        internal static void AddRelationships<TState, TTrigger>(StateInfo info, StateRepresentation<TState, TTrigger> stateRepresentation, Func<TState, StateInfo> lookupState)
         {
             if (lookupState == null) throw new ArgumentNullException(nameof(lookupState));
 
@@ -51,31 +51,99 @@ namespace Stateless.Reflection
             foreach (var triggerBehaviours in stateRepresentation.TriggerBehaviours)
             {
                 // First add all the deterministic transitions
-                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is StateMachine<TState, TTrigger>.TransitioningTriggerBehaviour)))
+                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is TransitioningTriggerBehaviour<TState, TTrigger>)))
                 {
-                    var destinationInfo = lookupState(((StateMachine<TState, TTrigger>.TransitioningTriggerBehaviour)item).Destination);
+                    var destinationInfo = lookupState(((TransitioningTriggerBehaviour<TState, TTrigger>)item).Destination);
                     fixedTransitions.Add(FixedTransitionInfo.Create(item, destinationInfo));
                 }
-                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is StateMachine<TState, TTrigger>.ReentryTriggerBehaviour)))
+                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is ReentryTriggerBehaviour<TState, TTrigger>)))
                 {
-                    var destinationInfo = lookupState(((StateMachine<TState, TTrigger>.ReentryTriggerBehaviour)item).Destination);
+                    var destinationInfo = lookupState(((ReentryTriggerBehaviour<TState, TTrigger>)item).Destination);
                     fixedTransitions.Add(FixedTransitionInfo.Create(item, destinationInfo));
                 }
                 //Then add all the internal transitions
-                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is StateMachine<TState, TTrigger>.InternalTriggerBehaviour)))
+                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is InternalTriggerBehaviour<TState, TTrigger>)))
                 {
                     var destinationInfo = lookupState(stateRepresentation.UnderlyingState);
                     fixedTransitions.Add(FixedTransitionInfo.Create(item, destinationInfo));
                 }
                 // Then add all the dynamic transitions
-                foreach (var item in triggerBehaviours.Value.Where(behaviour => behaviour is StateMachine<TState, TTrigger>.DynamicTriggerBehaviour))
+                foreach (var item in triggerBehaviours.Value.Where(behaviour => behaviour is DynamicTriggerBehaviour<TState, TTrigger>))
                 {
-                    dynamicTransitions.Add(((StateMachine<TState, TTrigger>.DynamicTriggerBehaviour)item).TransitionInfo);
+                    dynamicTransitions.Add(((DynamicTriggerBehaviour<TState, TTrigger>)item).TransitionInfo);
                 }
             }
 
             info.AddRelationships(superstate, substates, fixedTransitions, dynamicTransitions);
         }
+
+#if TASKS
+        internal static StateInfo CreateStateInfo<TState, TTrigger>(AsyncStateRepresentation<TState, TTrigger> stateRepresentation)
+        {
+            if (stateRepresentation == null)
+                throw new ArgumentException(nameof(stateRepresentation));
+
+            var ignoredTriggers = new List<IgnoredTransitionInfo>();
+
+            // stateRepresentation.TriggerBehaviours maps from TTrigger to ICollection<TriggerBehaviour>
+            foreach (var triggerBehaviours in stateRepresentation.TriggerBehaviours)
+            {
+                foreach (var item in triggerBehaviours.Value)
+                {
+                    if (item is IgnoredTriggerBehaviour<TState, TTrigger> behaviour)
+                    {
+                        ignoredTriggers.Add(IgnoredTransitionInfo.Create(behaviour));
+                    }
+                }
+            }
+
+            return new StateInfo(stateRepresentation.UnderlyingState, ignoredTriggers,
+                stateRepresentation.EntryActions.Select(e => ActionInfo.Create(e)).ToList(),
+                stateRepresentation.ActivateActions.Select(e => e.Description).ToList(),
+                stateRepresentation.DeactivateActions.Select(e => e.Description).ToList(),
+                stateRepresentation.ExitActions.Select(e => e.Description).ToList());
+        }
+
+        internal static void AddRelationships<TState, TTrigger>(StateInfo info, AsyncStateRepresentation<TState, TTrigger> stateRepresentation, Func<TState, StateInfo> lookupState)
+        {
+            if (lookupState == null) throw new ArgumentNullException(nameof(lookupState));
+
+            var substates = stateRepresentation.GetSubstates().Select(s => lookupState(s.UnderlyingState)).ToList();
+
+            StateInfo superstate = null;
+            if (stateRepresentation.Superstate != null)
+                superstate = lookupState(stateRepresentation.Superstate.UnderlyingState);
+
+            var fixedTransitions = new List<FixedTransitionInfo>();
+            var dynamicTransitions = new List<DynamicTransitionInfo>();
+
+            foreach (var triggerBehaviours in stateRepresentation.TriggerBehaviours)
+            {
+                // First add all the deterministic transitions
+                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is TransitioningTriggerBehaviour<TState, TTrigger>)))
+                {
+                    var destinationInfo = lookupState(((TransitioningTriggerBehaviour<TState, TTrigger>)item).Destination);
+                    fixedTransitions.Add(FixedTransitionInfo.Create(item, destinationInfo));
+                }
+                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is ReentryTriggerBehaviour<TState, TTrigger>)))
+                {
+                    var destinationInfo = lookupState(((ReentryTriggerBehaviour<TState, TTrigger>)item).Destination);
+                    fixedTransitions.Add(FixedTransitionInfo.Create(item, destinationInfo));
+                }
+                //Then add all the internal transitions
+                foreach (var item in triggerBehaviours.Value.Where(behaviour => (behaviour is InternalTriggerBehaviour<TState, TTrigger>)))
+                {
+                    var destinationInfo = lookupState(stateRepresentation.UnderlyingState);
+                    fixedTransitions.Add(FixedTransitionInfo.Create(item, destinationInfo));
+                }
+                // Then add all the dynamic transitions
+                foreach (var item in triggerBehaviours.Value.Where(behaviour => behaviour is DynamicTriggerBehaviour<TState, TTrigger>))
+                {
+                    dynamicTransitions.Add(((DynamicTriggerBehaviour<TState, TTrigger>)item).TransitionInfo);
+                }
+            }
+        }
+#endif
 
         private StateInfo(
             object underlyingState,

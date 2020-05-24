@@ -278,10 +278,10 @@ namespace Stateless.Tests
         {
             var handled = false;
 
-            var sm = new StateMachine<State, Trigger>(State.A);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A);
 
             sm.Configure(State.A)
-                .InternalTransition(Trigger.Y, () => handled=true);
+                .InternalTransition(Trigger.Y, () => { handled = true; return Task.CompletedTask; });
 
             await sm.FireAsync(Trigger.Y);
 

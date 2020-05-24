@@ -341,7 +341,7 @@ namespace Stateless.Tests
             sm.Configure(State.B)
                 .Permit(Trigger.X, State.A);
 
-            StateMachine<State, Trigger>.Transition transition = null;
+            Transition<State, Trigger> transition = null;
             sm.OnTransitioned(t => transition = t);
 
             sm.Fire(Trigger.X);
@@ -387,7 +387,7 @@ namespace Stateless.Tests
             sm.Configure(State.B)
                 .Permit(Trigger.X, State.A);
 
-            StateMachine<State, Trigger>.Transition transition = null;
+            Transition<State, Trigger> transition = null;
             sm.OnTransitioned(t => transition = t);
 
             string parameter = "the parameter";
@@ -410,7 +410,7 @@ namespace Stateless.Tests
             sm.Configure(State.B)
                 .Permit(Trigger.X, State.A);
 
-            StateMachine<State, Trigger>.Transition transition = null;
+            Transition<State, Trigger> transition = null;
             sm.OnTransitioned(t => transition = t);
 
             string firstParameter = "the parameter";

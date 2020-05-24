@@ -3,67 +3,48 @@ using System.Threading.Tasks;
 
 namespace Stateless
 {
-    public partial class StateMachine<TState, TTrigger>
+    internal abstract class DeactivateActionBehaviour<TState>
     {
-        internal abstract class DeactivateActionBehaviour
+        protected readonly TState _state;
+
+        protected DeactivateActionBehaviour(TState state, Reflection.InvocationInfo actionDescription)
         {
-            readonly TState _state;
+            _state = state;
+            Description = actionDescription ?? throw new ArgumentNullException(nameof(actionDescription));
+        }
 
-            protected DeactivateActionBehaviour(TState state, Reflection.InvocationInfo actionDescription)
-            {
-                _state = state;
-                Description = actionDescription ?? throw new ArgumentNullException(nameof(actionDescription));
-            }
+        internal Reflection.InvocationInfo Description { get; }
+    }
 
-            internal Reflection.InvocationInfo Description { get; }
+    internal class SyncDeactivateActionBehaviour<TState> : DeactivateActionBehaviour<TState>
+    {
+        readonly Action _action;
 
-            public abstract void Execute();
-            public abstract Task ExecuteAsync();
+        public SyncDeactivateActionBehaviour(TState state, Action action, Reflection.InvocationInfo actionDescription)
+            : base(state, actionDescription)
+        {
+            _action = action;
+        }
 
-            public class Sync : DeactivateActionBehaviour
-            {
-                readonly Action _action;
+        public void Execute()
+        {
+            _action();
+        }
+    }
 
-                public Sync(TState state, Action action, Reflection.InvocationInfo actionDescription)
-                    : base(state, actionDescription)
-                {
-                    _action = action;
-                }
+    internal class AsyncDeactivateActionBehaviour<TState> : DeactivateActionBehaviour<TState>
+    {
+        readonly Func<Task> _action;
 
-                public override void Execute()
-                {
-                    _action();
-                }
+        public AsyncDeactivateActionBehaviour(TState state, Func<Task> action, Reflection.InvocationInfo actionDescription)
+            : base(state, actionDescription)
+        {
+            _action = action;
+        }
 
-                public override Task ExecuteAsync()
-                {
-                    Execute();
-                    return TaskResult.Done;
-                }
-            }
-
-            public class Async : DeactivateActionBehaviour
-            {
-                readonly Func<Task> _action;
-
-                public Async(TState state, Func<Task> action, Reflection.InvocationInfo actionDescription)
-                    : base(state, actionDescription)
-                {
-                    _action = action;
-                }
-
-                public override void Execute()
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot execute asynchronous action specified in OnDeactivateAsync for '{_state}' state. " +
-                         "Use asynchronous version of Deactivate [DeactivateAsync]");
-                }
-
-                public override Task ExecuteAsync()
-                {
-                    return _action();
-                }
-            }
+        public Task ExecuteAsync()
+        {
+            return _action();
         }
     }
 }

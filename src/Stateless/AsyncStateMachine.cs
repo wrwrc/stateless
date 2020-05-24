@@ -4,11 +4,116 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Stateless.Reflection;
 
 namespace Stateless
 {
-    public partial class StateMachine<TState, TTrigger>
+    /// <summary>
+    /// Models behaviour as transitions between a finite set of states.
+    /// </summary>
+    /// <typeparam name="TState">The type used to represent the states.</typeparam>
+    /// <typeparam name="TTrigger">The type used to represent the triggers that cause state transitions.</typeparam>
+    public class AsyncStateMachine<TState, TTrigger>
     {
+        private readonly IDictionary<TState, AsyncStateRepresentation<TState, TTrigger>> _stateConfiguration = new Dictionary<TState, AsyncStateRepresentation<TState, TTrigger>>();
+        private readonly IDictionary<TTrigger, TriggerWithParameters<TTrigger>> _triggerConfiguration = new Dictionary<TTrigger, TriggerWithParameters<TTrigger>>();
+        private readonly Func<TState> _stateAccessor;
+        private readonly Action<TState> _stateMutator;
+        private UnhandledTriggerAction<TState, TTrigger> _unhandledTriggerAction;
+        private OnTransitionedEvent<TState, TTrigger> _onTransitionedEvent;
+        private readonly FiringMode _firingMode;
+        private readonly Queue<QueuedTrigger<TTrigger>> _eventQueue = new Queue<QueuedTrigger<TTrigger>>();
+        private bool _firing;
+
+        /// <summary>
+        /// Construct a state machine with external state storage.
+        /// </summary>
+        /// <param name="stateAccessor">A function that will be called to read the current state value.</param>
+        /// <param name="stateMutator">An action that will be called to write new state values.</param>
+        public AsyncStateMachine(Func<TState> stateAccessor, Action<TState> stateMutator) :this(stateAccessor, stateMutator, FiringMode.Queued)
+        {
+        }
+
+        /// <summary>
+        /// Construct a state machine.
+        /// </summary>
+        /// <param name="initialState">The initial state.</param>
+        public AsyncStateMachine(TState initialState) : this(initialState, FiringMode.Queued)
+        {
+        }
+
+        /// <summary>
+        /// Construct a state machine with external state storage.
+        /// </summary>
+        /// <param name="stateAccessor">A function that will be called to read the current state value.</param>
+        /// <param name="stateMutator">An action that will be called to write new state values.</param>
+        /// <param name="firingMode">Optional specification of fireing mode.</param>
+        public AsyncStateMachine(Func<TState> stateAccessor, Action<TState> stateMutator, FiringMode firingMode) : this()
+        {
+            _stateAccessor = stateAccessor ?? throw new ArgumentNullException(nameof(stateAccessor));
+            _stateMutator = stateMutator ?? throw new ArgumentNullException(nameof(stateMutator));
+
+            _firingMode = firingMode;
+        }
+
+        /// <summary>
+        /// Construct a state machine.
+        /// </summary>
+        /// <param name="initialState">The initial state.</param>
+        /// <param name="firingMode">Optional specification of fireing mode.</param>
+        public AsyncStateMachine(TState initialState, FiringMode firingMode) : this()
+        {
+            var reference = new StateReference<TState> { State = initialState };
+            _stateAccessor = () => reference.State;
+            _stateMutator = s => reference.State = s;
+
+            _firingMode = firingMode;
+        }
+
+
+        /// <summary>
+        /// Default constuctor
+        /// </summary>
+        AsyncStateMachine()
+        {
+            _unhandledTriggerAction = new SyncUnhandledTriggerAction<TState, TTrigger>(DefaultUnhandledTriggerAction);
+            _onTransitionedEvent = new OnTransitionedEvent<TState, TTrigger>();
+        }
+
+        /// <summary>
+        /// The current state.
+        /// </summary>
+        public TState State
+        {
+            get
+            {
+                return _stateAccessor();
+            }
+            private set
+            {
+                _stateMutator(value);
+            }
+        }
+
+        AsyncStateRepresentation<TState, TTrigger> CurrentRepresentation
+        {
+            get
+            {
+                return GetRepresentation(State);
+            }
+        }
+
+        /// <summary>
+        /// Begin configuration of the entry/exit actions and allowed transitions
+        /// when the state machine is in a particular state.
+        /// </summary>
+        /// <param name="state">The state to configure.</param>
+        /// <returns>A configuration object through which the state can be configured.</returns>
+        public AsyncStateConfiguration<TState, TTrigger> Configure(TState state)
+        {
+            return new AsyncStateConfiguration<TState, TTrigger>(this, GetRepresentation(state), GetRepresentation);
+        }
+
         /// <summary>
         /// Activates current state in asynchronous fashion. Actions associated with activating the currrent state
         /// will be invoked. The activation is idempotent and subsequent activation of the same current state 
@@ -56,7 +161,7 @@ namespace Stateless
         /// <param name="arg0">The first argument.</param>
         /// <exception cref="System.InvalidOperationException">The current state does
         /// not allow the trigger to be fired.</exception>
-        public Task FireAsync<TArg0>(TriggerWithParameters<TArg0> trigger, TArg0 arg0)
+        public Task FireAsync<TArg0>(TriggerWithParameters<TTrigger, TArg0> trigger, TArg0 arg0)
         {
             if (trigger == null) throw new ArgumentNullException(nameof(trigger));
 
@@ -76,7 +181,7 @@ namespace Stateless
         /// <param name="trigger">The trigger to fire.</param>
         /// <exception cref="System.InvalidOperationException">The current state does
         /// not allow the trigger to be fired.</exception>
-        public Task FireAsync<TArg0, TArg1>(TriggerWithParameters<TArg0, TArg1> trigger, TArg0 arg0, TArg1 arg1)
+        public Task FireAsync<TArg0, TArg1>(TriggerWithParameters<TTrigger, TArg0, TArg1> trigger, TArg0 arg0, TArg1 arg1)
         {
             if (trigger == null) throw new ArgumentNullException(nameof(trigger));
 
@@ -98,7 +203,7 @@ namespace Stateless
         /// <param name="trigger">The trigger to fire.</param>
         /// <exception cref="System.InvalidOperationException">The current state does
         /// not allow the trigger to be fired.</exception>
-        public Task FireAsync<TArg0, TArg1, TArg2>(TriggerWithParameters<TArg0, TArg1, TArg2> trigger, TArg0 arg0, TArg1 arg1, TArg2 arg2)
+        public Task FireAsync<TArg0, TArg1, TArg2>(TriggerWithParameters<TTrigger, TArg0, TArg1, TArg2> trigger, TArg0 arg0, TArg1 arg1, TArg2 arg2)
         {
             if (trigger == null) throw new ArgumentNullException(nameof(trigger));
 
@@ -136,7 +241,7 @@ namespace Stateless
         {
             if (_firing)
             {
-                _eventQueue.Enqueue(new QueuedTrigger { Trigger = trigger, Args = args });
+                _eventQueue.Enqueue(new QueuedTrigger<TTrigger> { Trigger = trigger, Args = args });
                 return;
             }
 
@@ -173,16 +278,16 @@ namespace Stateless
                 return;
             }
             // Check if this trigger should be ignored
-            if (result.Handler is IgnoredTriggerBehaviour)
+            if (result.Handler is IgnoredTriggerBehaviour<TState, TTrigger>)
             {
                 return;
             }
 
             // Handle special case, re-entry in superstate
-            if (result.Handler is ReentryTriggerBehaviour handler)
+            if (result.Handler is ReentryTriggerBehaviour<TState, TTrigger> handler)
             {
                 // Handle transition, and set new state
-                var transition = new Transition(source, handler.Destination, trigger, args);
+                var transition = new Transition<TState, TTrigger>(source, handler.Destination, trigger, args);
                 transition = await representativeState.ExitAsync(transition);
                 State = transition.Destination;
                 var newRepresentation = GetRepresentation(transition.Destination);
@@ -190,18 +295,18 @@ namespace Stateless
                 if (!source.Equals(transition.Destination))
                 {
                     // Then Exit the final superstate
-                    transition = new Transition(handler.Destination, handler.Destination, trigger, args);
+                    transition = new Transition<TState, TTrigger>(handler.Destination, handler.Destination, trigger, args);
                     await newRepresentation.ExitAsync(transition);
                 }
 
-                await _onTransitionedEvent.InvokeAsync(new Transition(source, handler.Destination, trigger, args));
+                await _onTransitionedEvent.InvokeAsync(new Transition<TState, TTrigger>(source, handler.Destination, trigger, args));
 
                 await newRepresentation.EnterAsync(transition, args);
             }
             // Check if it is an internal transition, or a transition from one state to another.
             else if (result.Handler.ResultsInTransitionFrom(source, args, out var destination))
             {
-                var transition = new Transition(source, destination, trigger, args);
+                var transition = new Transition<TState, TTrigger>(source, destination, trigger, args);
 
                 transition = await representativeState.ExitAsync(transition).ConfigureAwait(false);
 
@@ -225,7 +330,7 @@ namespace Stateless
                     // Check if state has substate(s), and if an initial transition(s) has been set up.
                     while (newRepresentation.GetSubstates().Any() && newRepresentation.HasInitialTransition)
                     {
-                        var initialTransition = new InitialTransition(source, newRepresentation.InitialTransitionTarget, trigger, args);
+                        var initialTransition = new InitialTransition<TState, TTrigger>(source, newRepresentation.InitialTransitionTarget, trigger, args);
                         newRepresentation = GetRepresentation(newRepresentation.InitialTransitionTarget);
                         await newRepresentation.EnterAsync(initialTransition, args);
                         State = newRepresentation.UnderlyingState;
@@ -234,10 +339,39 @@ namespace Stateless
             }
             else
             {
-                var transition = new Transition(source, destination, trigger, args);
+                var transition = new Transition<TState, TTrigger>(source, destination, trigger, args);
 
                 await CurrentRepresentation.InternalActionAsync(transition, args).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// Provides an info object which exposes the states, transitions, and actions of this machine.
+        /// </summary>
+        public StateMachineInfo GetInfo()
+        {
+            var initialState = StateInfo.CreateStateInfo(new StateRepresentation<TState, TTrigger>(State));
+
+            var representations = _stateConfiguration.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            var behaviours = _stateConfiguration.SelectMany(kvp => kvp.Value.TriggerBehaviours.SelectMany(b => b.Value.OfType<TransitioningTriggerBehaviour<TState, TTrigger>>().Select(tb => tb.Destination))).ToList();
+            behaviours.AddRange(_stateConfiguration.SelectMany(kvp => kvp.Value.TriggerBehaviours.SelectMany(b => b.Value.OfType<ReentryTriggerBehaviour<TState, TTrigger>>().Select(tb => tb.Destination))).ToList());
+
+            var reachable = behaviours
+                .Distinct()
+                .Except(representations.Keys)
+                .Select(underlying => new AsyncStateRepresentation<TState, TTrigger>(underlying))
+                .ToArray();
+
+            foreach (var representation in reachable)
+                representations.Add(representation.UnderlyingState, representation);
+
+            var info = representations.ToDictionary(kvp => kvp.Key, kvp => StateInfo.CreateStateInfo(kvp.Value));
+
+            foreach (var state in info)
+                StateInfo.AddRelationships(state.Value, representations[state.Key], k => info[k]);
+
+            return new StateMachineInfo(info.Values, typeof(TState), typeof(TTrigger), initialState);
         }
 
         /// <summary>
@@ -248,7 +382,7 @@ namespace Stateless
         public void OnUnhandledTriggerAsync(Func<TState, TTrigger, Task> unhandledTriggerAction)
         {
             if (unhandledTriggerAction == null) throw new ArgumentNullException(nameof(unhandledTriggerAction));
-            _unhandledTriggerAction = new UnhandledTriggerAction.Async((s, t, c) => unhandledTriggerAction(s, t));
+            _unhandledTriggerAction = new AsyncUnhandledTriggerAction<TState, TTrigger>((s, t, c) => unhandledTriggerAction(s, t));
         }
 
         /// <summary>
@@ -259,7 +393,7 @@ namespace Stateless
         public void OnUnhandledTriggerAsync(Func<TState, TTrigger, ICollection<string>, Task> unhandledTriggerAction)
         {
             if (unhandledTriggerAction == null) throw new ArgumentNullException(nameof(unhandledTriggerAction));
-            _unhandledTriggerAction = new UnhandledTriggerAction.Async(unhandledTriggerAction);
+            _unhandledTriggerAction = new AsyncUnhandledTriggerAction<TState, TTrigger>(unhandledTriggerAction);
         }
 
         /// <summary>
@@ -268,10 +402,35 @@ namespace Stateless
         /// </summary>
         /// <param name="onTransitionAction">The asynchronous action to execute, accepting the details
         /// of the transition.</param>
-        public void OnTransitionedAsync(Func<Transition, Task> onTransitionAction)
+        public void OnTransitionedAsync(Func<Transition<TState, TTrigger>, Task> onTransitionAction)
         {
             if (onTransitionAction == null) throw new ArgumentNullException(nameof(onTransitionAction));
             _onTransitionedEvent.Register(onTransitionAction);
+        }
+
+        void DefaultUnhandledTriggerAction(TState state, TTrigger trigger, ICollection<string> unmetGuardConditions)
+        {
+            if (unmetGuardConditions?.Any() ?? false)
+                throw new InvalidOperationException(
+                    string.Format(
+                        StateMachineResources.NoTransitionsUnmetGuardConditions,
+                        trigger, state, string.Join(", ", unmetGuardConditions)));
+
+            throw new InvalidOperationException(
+                string.Format(
+                    StateMachineResources.NoTransitionsPermitted,
+                    trigger, state));
+        }
+
+        AsyncStateRepresentation<TState, TTrigger> GetRepresentation(TState state)
+        {
+            if (!_stateConfiguration.TryGetValue(state, out AsyncStateRepresentation<TState, TTrigger> result))
+            {
+                result = new AsyncStateRepresentation<TState, TTrigger>(state);
+                _stateConfiguration.Add(state, result);
+            }
+
+            return result;
         }
     }
 }

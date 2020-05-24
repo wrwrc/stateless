@@ -66,7 +66,7 @@ namespace Stateless.Tests
         [Fact]
         public async void EntersSubStateAsync()
         {
-            var sm = new StateMachine<State, Trigger>(State.A);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A);
 
             sm.Configure(State.A).Permit(Trigger.X, State.B);
 
@@ -83,7 +83,7 @@ namespace Stateless.Tests
         [Fact]
         public async void EntersSubStateofSubstateAsync()
         {
-            var sm = new StateMachine<State, Trigger>(State.A);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A);
 
             sm.Configure(State.A).Permit(Trigger.X, State.B);
 
@@ -104,7 +104,7 @@ namespace Stateless.Tests
         [Fact]
         public async void DoesNotEnterSubStateofSubstateAsync()
         {
-            var sm = new StateMachine<State, Trigger>(State.A);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A);
 
             sm.Configure(State.A).Permit(Trigger.X, State.B);
 
@@ -149,7 +149,7 @@ namespace Stateless.Tests
         [Fact]
         public async void DoNotAllowTransitionToAnotherSuperstateAsync()
         {
-            var sm = new StateMachine<State, Trigger>(State.A);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A);
 
             sm.Configure(State.A).Permit(Trigger.X, State.B);
 

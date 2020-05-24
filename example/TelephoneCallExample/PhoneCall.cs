@@ -31,9 +31,9 @@ namespace TelephoneCallExample
         State _state = State.OffHook;
         
         StateMachine<State, Trigger> _machine;
-        StateMachine<State, Trigger>.TriggerWithParameters<int> _setVolumeTrigger;
+        TriggerWithParameters<Trigger, int> _setVolumeTrigger;
 
-        StateMachine<State, Trigger>.TriggerWithParameters<string> _setCalleeTrigger;
+        TriggerWithParameters<Trigger, string> _setCalleeTrigger;
 
         string _caller;
 

@@ -38,11 +38,11 @@ namespace Stateless.Tests
 
         }
 
-        void OnEntryTrans(StateMachine<State, Trigger>.Transition trans)
+        void OnEntryTrans(Transition<State, Trigger> trans)
         {
         }
 
-        void OnEntryIntTrans(int i, StateMachine<State, Trigger>.Transition trans)
+        void OnEntryIntTrans(int i, Transition<State, Trigger> trans)
         {
         }
 
@@ -60,7 +60,7 @@ namespace Stateless.Tests
         {
         }
 
-        Task OnEntryTransAsync(StateMachine<State, Trigger>.Transition trans)
+        Task OnEntryTransAsync(Transition<State, Trigger> trans)
         {
             return TaskResult.Done;
         }
@@ -79,7 +79,7 @@ namespace Stateless.Tests
         {
         }
 
-        void OnExitTrans(StateMachine<State, Trigger>.Transition trans)
+        void OnExitTrans(Transition<State, Trigger> trans)
         {
         }
 
@@ -88,7 +88,7 @@ namespace Stateless.Tests
             return TaskResult.Done;
         }
 
-        Task OnExitTransAsync(StateMachine<State, Trigger>.Transition trans)
+        Task OnExitTransAsync(Transition<State, Trigger> trans)
         {
             return TaskResult.Done;
         }
@@ -754,28 +754,28 @@ namespace Stateless.Tests
         [Fact]
         public void ReflectionMethodNamesAsync()
         {
-            var sm = new StateMachine<State, Trigger>(State.A);
+            var sm = new AsyncStateMachine<State, Trigger>(State.A);
 
             sm.Configure(State.A)
-                .OnActivateAsync(OnActivateAsync)
-                .OnEntryAsync(OnEntryAsync)
-                .OnExitAsync(OnExitAsync)
-                .OnDeactivateAsync(OnDeactivateAsync);
+                .OnActivate(OnActivateAsync)
+                .OnEntry(OnEntryAsync)
+                .OnExit(OnExitAsync)
+                .OnDeactivate(OnDeactivateAsync);
             sm.Configure(State.B)
-                .OnActivateAsync(OnActivateAsync, UserDescription + "B-Activate")
-                .OnEntryAsync(OnEntryAsync, UserDescription + "B-Entry")
-                .OnExitAsync(OnExitAsync, UserDescription + "B-Exit")
-                .OnDeactivateAsync(OnDeactivateAsync, UserDescription + "B-Deactivate");
+                .OnActivate(OnActivateAsync, UserDescription + "B-Activate")
+                .OnEntry(OnEntryAsync, UserDescription + "B-Entry")
+                .OnExit(OnExitAsync, UserDescription + "B-Exit")
+                .OnDeactivate(OnDeactivateAsync, UserDescription + "B-Deactivate");
             sm.Configure(State.C)
-                .OnActivateAsync(() => OnActivateAsync())
-                .OnEntryAsync(() => OnEntryAsync())
-                .OnExitAsync(() => OnExitAsync())
-                .OnDeactivateAsync(() => OnDeactivateAsync());
+                .OnActivate(() => OnActivateAsync())
+                .OnEntry(() => OnEntryAsync())
+                .OnExit(() => OnExitAsync())
+                .OnDeactivate(() => OnDeactivateAsync());
             sm.Configure(State.D)
-                .OnActivateAsync(() => OnActivateAsync(), UserDescription + "D-Activate")
-                .OnEntryAsync(() => OnEntryAsync(), UserDescription + "D-Entry")
-                .OnExitAsync(() => OnExitAsync(), UserDescription + "D-Exit")
-                .OnDeactivateAsync(() => OnDeactivateAsync(), UserDescription + "D-Deactivate");
+                .OnActivate(() => OnActivateAsync(), UserDescription + "D-Activate")
+                .OnEntry(() => OnEntryAsync(), UserDescription + "D-Entry")
+                .OnExit(() => OnExitAsync(), UserDescription + "D-Exit")
+                .OnDeactivate(() => OnDeactivateAsync(), UserDescription + "D-Deactivate");
 
             StateMachineInfo inf = sm.GetInfo();
 
@@ -788,20 +788,20 @@ namespace Stateless.Tests
             }
 
             // New StateMachine, new tests: entry and exit, functions that take the transition as an argument
-            sm = new StateMachine<State, Trigger>(State.A);
+            sm = new AsyncStateMachine<State, Trigger>(State.A);
 
             sm.Configure(State.A)
-                .OnEntryAsync(OnEntryTransAsync)
-                .OnExitAsync(OnExitTransAsync);
+                .OnEntry(OnEntryTransAsync)
+                .OnExit(OnExitTransAsync);
             sm.Configure(State.B)
-                .OnEntryAsync(OnEntryTransAsync, UserDescription + "B-EntryTrans")
-                .OnExitAsync(OnExitTransAsync, UserDescription + "B-ExitTrans");
+                .OnEntry(OnEntryTransAsync, UserDescription + "B-EntryTrans")
+                .OnExit(OnExitTransAsync, UserDescription + "B-ExitTrans");
             sm.Configure(State.C)
-                .OnEntryAsync(t => OnEntryTransAsync(t))
-                .OnExitAsync(t => OnExitTransAsync(t));
+                .OnEntry(t => OnEntryTransAsync(t))
+                .OnExit(t => OnExitTransAsync(t));
             sm.Configure(State.D)
-                .OnEntryAsync(t => OnEntryTransAsync(t), UserDescription + "D-EntryTrans")
-                .OnExitAsync(t => OnExitTransAsync(t), UserDescription + "D-ExitTrans");
+                .OnEntry(t => OnEntryTransAsync(t), UserDescription + "D-EntryTrans")
+                .OnExit(t => OnExitTransAsync(t), UserDescription + "D-ExitTrans");
 
             inf = sm.GetInfo();
 
@@ -811,14 +811,14 @@ namespace Stateless.Tests
                 VerifyMethodNames(stateInfo.ExitActions, "On", "ExitTrans", (State)stateInfo.UnderlyingState, InvocationInfo.Timing.Asynchronous);
             }
             /*
-            public StateConfiguration OnEntryFromAsync(TTrigger trigger, Func<Task> entryAction, string entryActionDescription = null)
-            public StateConfiguration OnEntryFromAsync(TTrigger trigger, Func<Transition, Task> entryAction, string entryActionDescription = null)
-            public StateConfiguration OnEntryFromAsync<TArg0>(TriggerWithParameters<TArg0> trigger, Func<TArg0, Task> entryAction, string entryActionDescription = null)
-            public StateConfiguration OnEntryFromAsync<TArg0>(TriggerWithParameters<TArg0> trigger, Func<TArg0, Transition, Task> entryAction, string entryActionDescription = null)
-            public StateConfiguration OnEntryFromAsync<TArg0, TArg1>(TriggerWithParameters<TArg0, TArg1> trigger, Func<TArg0, TArg1, Task> entryAction, string entryActionDescription = null)
-            public StateConfiguration OnEntryFromAsync<TArg0, TArg1>(TriggerWithParameters<TArg0, TArg1> trigger, Func<TArg0, TArg1, Transition, Task> entryAction, string entryActionDescription = null)
-            public StateConfiguration OnEntryFromAsync<TArg0, TArg1, TArg2>(TriggerWithParameters<TArg0, TArg1, TArg2> trigger, Func<TArg0, TArg1, TArg2, Task> entryAction, string entryActionDescription = null)
-            public StateConfiguration OnEntryFromAsync<TArg0, TArg1, TArg2>(TriggerWithParameters<TArg0, TArg1, TArg2> trigger, Func<TArg0, TArg1, TArg2, Transition, Task> entryAction, string entryActionDescription = null)
+            public StateConfiguration OnEntryFrom(TTrigger trigger, Func<Task> entryAction, string entryActionDescription = null)
+            public StateConfiguration OnEntryFrom(TTrigger trigger, Func<Transition, Task> entryAction, string entryActionDescription = null)
+            public StateConfiguration OnEntryFrom<TArg0>(TriggerWithParameters<TArg0> trigger, Func<TArg0, Task> entryAction, string entryActionDescription = null)
+            public StateConfiguration OnEntryFrom<TArg0>(TriggerWithParameters<TArg0> trigger, Func<TArg0, Transition, Task> entryAction, string entryActionDescription = null)
+            public StateConfiguration OnEntryFrom<TArg0, TArg1>(TriggerWithParameters<TArg0, TArg1> trigger, Func<TArg0, TArg1, Task> entryAction, string entryActionDescription = null)
+            public StateConfiguration OnEntryFrom<TArg0, TArg1>(TriggerWithParameters<TArg0, TArg1> trigger, Func<TArg0, TArg1, Transition, Task> entryAction, string entryActionDescription = null)
+            public StateConfiguration OnEntryFrom<TArg0, TArg1, TArg2>(TriggerWithParameters<TArg0, TArg1, TArg2> trigger, Func<TArg0, TArg1, TArg2, Task> entryAction, string entryActionDescription = null)
+            public StateConfiguration OnEntryFrom<TArg0, TArg1, TArg2>(TriggerWithParameters<TArg0, TArg1, TArg2> trigger, Func<TArg0, TArg1, TArg2, Transition, Task> entryAction, string entryActionDescription = null)
             */
         }
 
